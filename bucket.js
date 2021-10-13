@@ -2,14 +2,8 @@ export class RateLimitedQueue {
     constructor(num_requests, time_interval) {
         this._num_requests = num_requests
         this._time_interval = time_interval
-        this._rps = num_requests / time_interval
         this._active_requests = 0
         this._queue = []
-
-        setInterval(() => {
-            this._active_requests = 0
-            this.doWork()
-        }, time_interval * 1000)
     }
 
     // addWork queues work on the queue. The work is executed
@@ -19,7 +13,8 @@ export class RateLimitedQueue {
         setTimeout(() => { this.doWork() }, 0)
     }
 
-    // doWork 
+    // doWork attempts to do as much work as possible by recursively
+    // scheduling itself.
     doWork() {
         if (this._queue.length == 0) {
             if (this._finish_signal_resolver) {
@@ -29,14 +24,21 @@ export class RateLimitedQueue {
         }
 
         if (this._active_requests < this._num_requests) {
+            // Schedule the current function.
             this._active_requests += 1
             const f = this._queue.shift()
             setTimeout(f, 0)
-        } else {
-            const outstandingRequests = this._queue.length
-            const minSecondsToWait = outstandingRequests / this._rps
-            console.log(`Scheduling work for ${minSecondsToWait}s ahead`)
-            setTimeout(() => { this.doWork() }, minSecondsToWait * 1000)
+
+            // Try to do more work.
+            if (this._queue.length > 0) {
+                setTimeout(() => { this.doWork() }, 0)
+            }
+
+            // Allow future work to be unblocked.
+            setTimeout(() => {
+                this._active_requests -= 1;
+                this.doWork();
+            }, this._time_interval * 1000)
         }
     }
 
